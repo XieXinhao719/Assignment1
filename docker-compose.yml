@@ -1,0 +1,26 @@
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks: [weather]
+
+  nodered:
+    build: ./nodered
+    restart: unless-stopped
+    ports:
+      - "1880:1880"
+    volumes:
+      - node_red_data:/data
+      - ./flows:/seed:ro
+    depends_on: [mongodb]
+    networks: [weather]
+
+networks:
+  weather:
+
+volumes:
+  mongo_data:
+  node_red_data:
+
