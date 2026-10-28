@@ -1,0 +1,427 @@
+[
+  {
+    "id": "parking-flow",
+    "type": "tab",
+    "label": "Hong Kong Smart Parking",
+    "disabled": false,
+    "info": "Real-time parking vacancy by district"
+  },
+  {
+    "id": "mongo",
+    "type": "mongodb3",
+    "name": "Parking MongoDB",
+    "uri": "mongodb://mongodb:27017",
+    "options": "",
+    "parallelism": "-1"
+  },
+  {
+    "id": "ui-base",
+    "type": "ui_base",
+    "theme": {
+      "name": "theme-light",
+      "lightTheme": {
+        "default": "#1976d2",
+        "baseColor": "#1976d2",
+        "baseFont": "Arial,Helvetica,sans-serif"
+      },
+      "darkTheme": {
+        "default": "#1976d2",
+        "baseColor": "#1976d2",
+        "baseFont": "Arial,Helvetica,sans-serif"
+      },
+      "customTheme": {
+        "name": "Parking",
+        "default": "#1976d2",
+        "baseColor": "#1976d2",
+        "baseFont": "Arial,Helvetica,sans-serif"
+      }
+    },
+    "site": {
+      "name": "Hong Kong Smart Parking",
+      "hideToolbar": "false",
+      "allowSwipe": "false",
+      "lockMenu": "false",
+      "allowTempTheme": "true",
+      "dateFormat": "DD/MM/YYYY",
+      "sizes": {
+        "sx": 48,
+        "sy": 48,
+        "gx": 6,
+        "gy": 6,
+        "cx": 6,
+        "cy": 6,
+        "px": 0,
+        "py": 0
+      }
+    }
+  },
+  {
+    "id": "ui-tab",
+    "type": "ui_tab",
+    "name": "Smart Parking",
+    "icon": "local_parking",
+    "disabled": false,
+    "hidden": false
+  },
+  {
+    "id": "parking-group",
+    "type": "ui_group",
+    "name": "District availability",
+    "tab": "ui-tab",
+    "disp": true,
+    "width": "12",
+    "collapse": false
+  },
+  {
+    "id": "info-timer",
+    "type": "inject",
+    "z": "parking-flow",
+    "name": "Refresh car park metadata daily",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "repeat": "86400",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "1",
+    "x": 170,
+    "y": 80,
+    "wires": [
+      [
+        "info-http"
+      ]
+    ]
+  },
+  {
+    "id": "info-http",
+    "type": "http request",
+    "z": "parking-flow",
+    "name": "Basic information",
+    "method": "GET",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "https://api.data.gov.hk/v1/carpark-info-vacancy?vehicleTypes=privateCar&lang=en_US&data=info",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 390,
+    "y": 80,
+    "wires": [
+      [
+        "info-cache"
+      ]
+    ]
+  },
+  {
+    "id": "info-cache",
+    "type": "function",
+    "z": "parking-flow",
+    "name": "Cache metadata by ID",
+    "func": "if(msg.statusCode!==200 || !msg.payload || !Array.isArray(msg.payload.results)) return null; const m={}; for(const p of msg.payload.results) if(p.park_Id) m[String(p.park_Id)]={name:p.name,district:p.district,space:Number(p.privateCar&&p.privateCar.space),latitude:p.latitude,longitude:p.longitude}; flow.set('parks',m); node.status({fill:'green',shape:'dot',text:Object.keys(m).length+' car parks'}); return null;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 630,
+    "y": 80,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "vac-timer",
+    "type": "inject",
+    "z": "parking-flow",
+    "name": "Collect vacancies every 5 minutes",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "repeat": "300",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "5",
+    "x": 180,
+    "y": 160,
+    "wires": [
+      [
+        "vac-http"
+      ]
+    ]
+  },
+  {
+    "id": "vac-http",
+    "type": "http request",
+    "z": "parking-flow",
+    "name": "Private-car vacancies",
+    "method": "GET",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "https://api.data.gov.hk/v1/carpark-info-vacancy?vehicleTypes=privateCar&lang=en_US&data=vacancy",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 420,
+    "y": 160,
+    "wires": [
+      [
+        "analyse"
+      ]
+    ]
+  },
+  {
+    "id": "analyse",
+    "type": "function",
+    "z": "parking-flow",
+    "name": "Join and aggregate by district",
+    "func": "if(msg.statusCode!==200 || !msg.payload || !Array.isArray(msg.payload.results)) {node.warn('Vacancy API error');return null;}\nconst meta=flow.get('parks')||{}; if(!Object.keys(meta).length){node.warn('Waiting for car park metadata');return null;}\nconst districts={}; const parks=[];\nfor(const row of msg.payload.results){\n const info=meta[String(row.park_Id)]; if(!info)continue;\n const entries=Array.isArray(row.privateCar)?row.privateCar:[];\n // A = numeric vacancies; B = availability only; C = closed. Do not mix these as counts.\n const exact=entries.filter(x=>x.vacancy_type==='A'&&Number.isFinite(Number(x.vacancy))&&Number(x.vacancy)>=0);\n const binary=entries.filter(x=>x.vacancy_type==='B'&&(Number(x.vacancy)===0||Number(x.vacancy)===1));\n if(!exact.length&&!binary.length)continue;\n const availability=exact.length?exact.reduce((s,x)=>s+Number(x.vacancy),0):null;\n const full=exact.length?availability===0:binary.every(x=>Number(x.vacancy)===0);\n const district=info.district||'Unknown';\n const d=districts[district]||(districts[district]={district,reported:0,full:0,exactCount:0,spacesAvailable:0});\n d.reported++;if(full)d.full++;if(availability!==null){d.exactCount++;d.spacesAvailable+=availability;}\n parks.push({id:String(row.park_Id),name:info.name||String(row.park_Id),district,available:availability,full,capacity:Number.isFinite(info.space)?info.space:null});\n}\nconst list=Object.values(districts).map(d=>({...d,fullPct:Math.round(100*d.full/d.reported)})).sort((a,b)=>a.district.localeCompare(b.district));\nif(!list.length)return null;\nmsg.payload={collectedAt:new Date().toISOString(),districts:list,parks};return msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 680,
+    "y": 160,
+    "wires": [
+      [
+        "store"
+      ]
+    ]
+  },
+  {
+    "id": "store",
+    "type": "mongodb3 in",
+    "z": "parking-flow",
+    "name": "Save snapshot",
+    "service": "_ext_",
+    "configNode": "mongo",
+    "collection": "parking_snapshots",
+    "operation": "insert",
+    "x": 910,
+    "y": 160,
+    "wires": [
+      [
+        "query-build"
+      ]
+    ]
+  },
+  {
+    "id": "startup",
+    "type": "inject",
+    "z": "parking-flow",
+    "name": "Load history every 5 minutes",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "repeat": "300",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "8",
+    "x": 170,
+    "y": 260,
+    "wires": [
+      [
+        "query-build"
+      ]
+    ]
+  },
+  {
+    "id": "query-build",
+    "type": "function",
+    "z": "parking-flow",
+    "name": "Last 24 hours",
+    "func": "msg.payload={collectedAt:{$gte:new Date(Date.now()-86400000).toISOString()}};return msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 410,
+    "y": 260,
+    "wires": [
+      [
+        "history"
+      ]
+    ]
+  },
+  {
+    "id": "history",
+    "type": "mongodb3 in",
+    "z": "parking-flow",
+    "name": "Read history",
+    "service": "_ext_",
+    "configNode": "mongo",
+    "collection": "parking_snapshots",
+    "operation": "find.toArray",
+    "x": 630,
+    "y": 260,
+    "wires": [
+      [
+        "dashboard"
+      ]
+    ]
+  },
+  {
+    "id": "dashboard",
+    "type": "function",
+    "z": "parking-flow",
+    "name": "Format district trends",
+    "func": "const rows=(Array.isArray(msg.payload)?msg.payload:Object.values(msg.payload||{})).filter(x=>x&&x.collectedAt&&Array.isArray(x.districts)).sort((a,b)=>a.collectedAt.localeCompare(b.collectedAt));\nif(!rows.length)return null;\nconst latest=rows[rows.length-1];\nconst districts=latest.districts.filter(d=>d.reported>=3).sort((a,b)=>b.spacesAvailable-a.spacesAvailable).slice(0,6).map(d=>d.district);\nconst chart=key=>[{series:districts,data:districts.map(name=>rows.map(r=>{const d=r.districts.find(x=>x.district===name);return {x:Date.parse(r.collectedAt),y:d?Number(d[key]):null};}).filter(p=>p.y!==null)),labels:['']}];\nconst reported=latest.districts.reduce((s,d)=>s+d.reported,0), full=latest.districts.reduce((s,d)=>s+d.full,0);\nconst summary=`${reported} reporting car parks; ${full} full (${Math.round(100*full/reported)}%). Updated ${latest.collectedAt}`;\nconst rank=latest.districts.filter(d=>d.reported>=3).sort((a,b)=>b.fullPct-a.fullPct).slice(0,8).map(d=>`${d.district}: ${d.fullPct}% full (${d.full}/${d.reported}); ${d.spacesAvailable} numeric vacancies`).join('<br>');\nreturn [{payload:chart('spacesAvailable')},{payload:chart('fullPct')},{payload:summary},{payload:rank}];",
+    "outputs": 4,
+    "noerr": 0,
+    "x": 850,
+    "y": 260,
+    "wires": [
+      [
+        "spaces-chart"
+      ],
+      [
+        "full-chart"
+      ],
+      [
+        "summary"
+      ],
+      [
+        "ranking"
+      ]
+    ]
+  },
+  {
+    "id": "spaces-chart",
+    "type": "ui_chart",
+    "z": "parking-flow",
+    "name": "Numeric vacancies",
+    "order": 2,
+    "label": "Available private-car spaces by district (exact reports)",
+    "x": 1080,
+    "y": 170,
+    "group": "parking-group",
+    "width": "12",
+    "height": "6",
+    "chartType": "line",
+    "legend": "true",
+    "xformat": "HH:mm",
+    "interpolate": "linear",
+    "nodata": "Collecting data",
+    "dot": true,
+    "ymin": "",
+    "ymax": "",
+    "removeOlder": "24",
+    "removeOlderPoints": "",
+    "removeOlderUnit": "3600",
+    "cutout": 0,
+    "useOneColor": false,
+    "colors": [
+      "#1f77b4",
+      "#ff7f0e",
+      "#2ca02c",
+      "#d62728",
+      "#9467bd",
+      "#8c564b"
+    ],
+    "useOldStyle": false,
+    "outputs": 1,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "full-chart",
+    "type": "ui_chart",
+    "z": "parking-flow",
+    "name": "Full percentage",
+    "order": 3,
+    "label": "Share of reporting car parks full (%)",
+    "x": 1080,
+    "y": 220,
+    "group": "parking-group",
+    "width": "12",
+    "height": "6",
+    "chartType": "line",
+    "legend": "true",
+    "xformat": "HH:mm",
+    "interpolate": "linear",
+    "nodata": "Collecting data",
+    "dot": true,
+    "ymin": "",
+    "ymax": "",
+    "removeOlder": "24",
+    "removeOlderPoints": "",
+    "removeOlderUnit": "3600",
+    "cutout": 0,
+    "useOneColor": false,
+    "colors": [
+      "#1f77b4",
+      "#ff7f0e",
+      "#2ca02c",
+      "#d62728",
+      "#9467bd",
+      "#8c564b"
+    ],
+    "useOldStyle": false,
+    "outputs": 1,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "summary",
+    "type": "ui_text",
+    "z": "parking-flow",
+    "name": "Snapshot summary",
+    "group": "parking-group",
+    "order": 1,
+    "width": "12",
+    "height": "2",
+    "label": "Latest snapshot",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "x": 1080,
+    "y": 280,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ranking",
+    "type": "ui_text",
+    "z": "parking-flow",
+    "name": "District ranking",
+    "group": "parking-group",
+    "order": 4,
+    "width": "12",
+    "height": "6",
+    "label": "Most constrained districts (at least 3 reports)",
+    "format": "{{{msg.payload}}}",
+    "layout": "row-spread",
+    "x": 1080,
+    "y": 340,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "errors",
+    "type": "catch",
+    "z": "parking-flow",
+    "name": "Flow errors",
+    "scope": null,
+    "uncaught": false,
+    "x": 180,
+    "y": 370,
+    "wires": [
+      [
+        "debug"
+      ]
+    ]
+  },
+  {
+    "id": "debug",
+    "type": "debug",
+    "z": "parking-flow",
+    "name": "Errors",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "x": 390,
+    "y": 370,
+    "wires": []
+  }
+]
+
