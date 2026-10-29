@@ -20,9 +20,9 @@
     "theme": {
       "name": "theme-light",
       "lightTheme": {
-        "default": "#1976d2",
-        "baseColor": "#1976d2",
-        "baseFont": "Arial,Helvetica,sans-serif"
+        "default": "#102b45",
+        "baseColor": "#102b45",
+        "baseFont": "Segoe UI,Microsoft YaHei,Arial,sans-serif"
       },
       "darkTheme": {
         "default": "#1976d2",
@@ -31,20 +31,20 @@
       },
       "customTheme": {
         "name": "Parking",
-        "default": "#1976d2",
-        "baseColor": "#1976d2",
-        "baseFont": "Arial,Helvetica,sans-serif"
+        "default": "#102b45",
+        "baseColor": "#102b45",
+        "baseFont": "Segoe UI,Microsoft YaHei,Arial,sans-serif"
       }
     },
     "site": {
-      "name": "Hong Kong Smart Parking",
+      "name": "香港停车供需观察",
       "hideToolbar": "false",
       "allowSwipe": "false",
       "lockMenu": "false",
       "allowTempTheme": "true",
       "dateFormat": "DD/MM/YYYY",
       "sizes": {
-        "sx": 48,
+        "sx": 84,
         "sy": 48,
         "gx": 6,
         "gy": 6,
@@ -58,7 +58,7 @@
   {
     "id": "ui-tab",
     "type": "ui_tab",
-    "name": "Smart Parking",
+    "name": "停车供需观察",
     "icon": "local_parking",
     "disabled": false,
     "hidden": false
@@ -66,11 +66,12 @@
   {
     "id": "parking-group",
     "type": "ui_group",
-    "name": "District availability",
+    "name": "实时概览",
     "tab": "ui-tab",
-    "disp": true,
+    "disp": false,
     "width": "12",
-    "collapse": false
+    "collapse": false,
+    "order": 1
   },
   {
     "id": "info-timer",
@@ -173,7 +174,7 @@
     "type": "function",
     "z": "parking-flow",
     "name": "Join and aggregate by district",
-    "func": "if(msg.statusCode!==200 || !msg.payload || !Array.isArray(msg.payload.results)) {node.warn('Vacancy API error');return null;}\nconst meta=flow.get('parks')||{}; if(!Object.keys(meta).length){node.warn('Waiting for car park metadata');return null;}\nconst districts={}; const parks=[];\nfor(const row of msg.payload.results){\n const info=meta[String(row.park_Id)]; if(!info)continue;\n const entries=Array.isArray(row.privateCar)?row.privateCar:[];\n // A = numeric vacancies; B = availability only; C = closed. Do not mix these as counts.\n const exact=entries.filter(x=>x.vacancy_type==='A'&&Number.isFinite(Number(x.vacancy))&&Number(x.vacancy)>=0);\n const binary=entries.filter(x=>x.vacancy_type==='B'&&(Number(x.vacancy)===0||Number(x.vacancy)===1));\n if(!exact.length&&!binary.length)continue;\n const availability=exact.length?exact.reduce((s,x)=>s+Number(x.vacancy),0):null;\n const full=exact.length?availability===0:binary.every(x=>Number(x.vacancy)===0);\n const district=info.district||'Unknown';\n const d=districts[district]||(districts[district]={district,reported:0,full:0,exactCount:0,spacesAvailable:0});\n d.reported++;if(full)d.full++;if(availability!==null){d.exactCount++;d.spacesAvailable+=availability;}\n parks.push({id:String(row.park_Id),name:info.name||String(row.park_Id),district,available:availability,full,capacity:Number.isFinite(info.space)?info.space:null});\n}\nconst list=Object.values(districts).map(d=>({...d,fullPct:Math.round(100*d.full/d.reported)})).sort((a,b)=>a.district.localeCompare(b.district));\nif(!list.length)return null;\nmsg.payload={collectedAt:new Date().toISOString(),districts:list,parks};return msg;",
+    "func": "if (msg.statusCode !== 200 || !msg.payload || !Array.isArray(msg.payload.results)) {\n    node.warn(\"Vacancy API error\");\n    return null;\n}\n\nconst metadata = flow.get(\"parks\") || {};\nconst metadataTotal = Object.keys(metadata).length;\nif (!metadataTotal) {\n    node.warn(\"Waiting for car park metadata\");\n    return null;\n}\n\nconst districts = {};\nconst parks = [];\nlet unmatched = 0;\nlet closed = 0;\n\nfor (const row of msg.payload.results) {\n    const info = metadata[String(row.park_Id)];\n    if (!info) {\n        unmatched++;\n        continue;\n    }\n\n    const entries = Array.isArray(row.privateCar) ? row.privateCar : [];\n    // A has a numeric vacancy count, B has only an available/full flag, C is closed.\n    const exact = entries.filter(x => x.vacancy_type === \"A\" && Number.isFinite(Number(x.vacancy)) && Number(x.vacancy) >= 0);\n    const binary = entries.filter(x => x.vacancy_type === \"B\" && (Number(x.vacancy) === 0 || Number(x.vacancy) === 1));\n    if (!exact.length && !binary.length) {\n        if (entries.some(x => x.vacancy_type === \"C\")) closed++;\n        continue;\n    }\n\n    const available = exact.length ? exact.reduce((sum, x) => sum + Number(x.vacancy), 0) : null;\n    const full = exact.length ? available === 0 : binary.every(x => Number(x.vacancy) === 0);\n    const reportType = exact.length ? \"A\" : \"B\";\n    const district = info.district || \"Unknown\";\n    const aggregate = districts[district] || (districts[district] = {\n        district, reported: 0, full: 0, exactCount: 0, spacesAvailable: 0\n    });\n\n    aggregate.reported++;\n    if (full) aggregate.full++;\n    if (reportType === \"A\") {\n        aggregate.exactCount++;\n        aggregate.spacesAvailable += available;\n    }\n    parks.push({\n        id: String(row.park_Id),\n        name: info.name || String(row.park_Id),\n        district,\n        available,\n        full,\n        reportType\n    });\n}\n\nconst districtList = Object.values(districts)\n    .map(d => ({ ...d, fullPct: Math.round(100 * d.full / d.reported) }))\n    .sort((a, b) => a.district.localeCompare(b.district));\nif (!districtList.length) return null;\n\nmsg.payload = {\n    collectedAt: new Date().toISOString(),\n    metadataTotal,\n    unmatched,\n    closed,\n    districts: districtList,\n    parks\n};\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 680,
@@ -259,8 +260,8 @@
     "type": "function",
     "z": "parking-flow",
     "name": "Format district trends",
-    "func": "const rows=(Array.isArray(msg.payload)?msg.payload:Object.values(msg.payload||{})).filter(x=>x&&x.collectedAt&&Array.isArray(x.districts)).sort((a,b)=>a.collectedAt.localeCompare(b.collectedAt));\nif(!rows.length)return null;\nconst latest=rows[rows.length-1];\nconst districts=latest.districts.filter(d=>d.reported>=3).sort((a,b)=>b.spacesAvailable-a.spacesAvailable).slice(0,6).map(d=>d.district);\nconst chart=key=>[{series:districts,data:districts.map(name=>rows.map(r=>{const d=r.districts.find(x=>x.district===name);return {x:Date.parse(r.collectedAt),y:d?Number(d[key]):null};}).filter(p=>p.y!==null)),labels:['']}];\nconst reported=latest.districts.reduce((s,d)=>s+d.reported,0), full=latest.districts.reduce((s,d)=>s+d.full,0);\nconst summary=`${reported} reporting car parks; ${full} full (${Math.round(100*full/reported)}%). Updated ${latest.collectedAt}`;\nconst rank=latest.districts.filter(d=>d.reported>=3).sort((a,b)=>b.fullPct-a.fullPct).slice(0,8).map(d=>`${d.district}: ${d.fullPct}% full (${d.full}/${d.reported}); ${d.spacesAvailable} numeric vacancies`).join('<br>');\nreturn [{payload:chart('spacesAvailable')},{payload:chart('fullPct')},{payload:summary},{payload:rank}];",
-    "outputs": 4,
+    "func": "const rows = (Array.isArray(msg.payload) ? msg.payload : Object.values(msg.payload || {}))\n    .filter(x => x && x.collectedAt && Array.isArray(x.districts))\n    .sort((a, b) => a.collectedAt.localeCompare(b.collectedAt));\nif (!rows.length) return null;\n\nconst latest = rows[rows.length - 1];\nconst eligible = latest.districts.filter(d => d.reported >= 3);\nconst seriesNames = [...eligible]\n    .sort((a, b) => b.spacesAvailable - a.spacesAvailable)\n    .slice(0, 6)\n    .map(d => d.district);\n\nconst chart = key => [{\n    series: seriesNames,\n    data: seriesNames.map(name => rows.map(row => {\n        const district = row.districts.find(d => d.district === name);\n        return { x: Date.parse(row.collectedAt), y: district ? Number(district[key]) : null };\n    }).filter(point => point.y !== null)),\n    labels: [\"\"]\n}];\n\nconst reported = latest.districts.reduce((sum, d) => sum + d.reported, 0);\nconst full = latest.districts.reduce((sum, d) => sum + d.full, 0);\nconst exactCount = latest.districts.reduce((sum, d) => sum + d.exactCount, 0);\nconst spacesAvailable = latest.districts.reduce((sum, d) => sum + d.spacesAvailable, 0);\nconst pressure = [...eligible].sort((a, b) => b.fullPct - a.fullPct || b.reported - a.reported);\nconst leading = pressure[0];\nconst availableParks = (latest.parks || [])\n    .filter(p => p.reportType === \"A\" && p.available > 0)\n    .sort((a, b) => b.available - a.available);\nconst fullParks = (latest.parks || [])\n    .filter(p => p.full)\n    .sort((a, b) => a.district.localeCompare(b.district) || a.name.localeCompare(b.name));\nconst metadataTotal = Number(latest.metadataTotal) || reported;\n\nconst overview = {\n    reported,\n    full,\n    fullPct: reported ? Math.round(100 * full / reported) : 0,\n    exactCount,\n    binaryCount: Math.max(0, reported - exactCount),\n    spacesAvailable,\n    snapshotCount: rows.length,\n    districtCount: eligible.length,\n    metadataTotal,\n    notReporting: Math.max(0, metadataTotal - reported),\n    updatedLocal: new Date(latest.collectedAt).toLocaleString(\"zh-HK\", {\n        timeZone: \"Asia/Hong_Kong\",\n        year: \"numeric\", month: \"2-digit\", day: \"2-digit\",\n        hour: \"2-digit\", minute: \"2-digit\", hour12: false\n    }),\n    districts: pressure,\n    availableParks,\n    fullParks,\n    insightTitle: leading ? \"重点观察：\" + leading.district : \"等待分区报告\",\n    insightText: leading\n        ? \"该区 \" + leading.full + \" / \" + leading.reported + \" 个报告停车场已满（\" + leading.fullPct + \"%）。比较各区时，也要看报告数量和 A 类覆盖，不能把精确空位总数当作占用率。\"\n        : \"当前各区的有效报告尚不足 3 个，暂不排名。\"\n};\n\nreturn [\n    { payload: chart(\"spacesAvailable\") },\n    { payload: chart(\"fullPct\") },\n    { payload: overview }\n];",
+    "outputs": 3,
     "noerr": 0,
     "x": 850,
     "y": 260,
@@ -272,10 +273,7 @@
         "full-chart"
       ],
       [
-        "summary"
-      ],
-      [
-        "ranking"
+        "overview"
       ]
     ]
   },
@@ -284,13 +282,13 @@
     "type": "ui_chart",
     "z": "parking-flow",
     "name": "Numeric vacancies",
-    "order": 2,
-    "label": "Available private-car spaces by district (exact reports)",
+    "order": 1,
+    "label": "精确空位数 · 主要地区",
     "x": 1080,
     "y": 170,
-    "group": "parking-group",
+    "group": "trend-group",
     "width": "12",
-    "height": "6",
+    "height": "5",
     "chartType": "line",
     "legend": "true",
     "xformat": "HH:mm",
@@ -323,13 +321,13 @@
     "type": "ui_chart",
     "z": "parking-flow",
     "name": "Full percentage",
-    "order": 3,
-    "label": "Share of reporting car parks full (%)",
+    "order": 2,
+    "label": "停车场满位比例 · 主要地区",
     "x": 1080,
     "y": 220,
-    "group": "parking-group",
+    "group": "trend-group",
     "width": "12",
-    "height": "6",
+    "height": "5",
     "chartType": "line",
     "legend": "true",
     "xformat": "HH:mm",
@@ -353,42 +351,6 @@
     ],
     "useOldStyle": false,
     "outputs": 1,
-    "wires": [
-      []
-    ]
-  },
-  {
-    "id": "summary",
-    "type": "ui_text",
-    "z": "parking-flow",
-    "name": "Snapshot summary",
-    "group": "parking-group",
-    "order": 1,
-    "width": "12",
-    "height": "2",
-    "label": "Latest snapshot",
-    "format": "{{msg.payload}}",
-    "layout": "row-spread",
-    "x": 1080,
-    "y": 280,
-    "wires": [
-      []
-    ]
-  },
-  {
-    "id": "ranking",
-    "type": "ui_text",
-    "z": "parking-flow",
-    "name": "District ranking",
-    "group": "parking-group",
-    "order": 4,
-    "width": "12",
-    "height": "6",
-    "label": "Most constrained districts (at least 3 reports)",
-    "format": "{{{msg.payload}}}",
-    "layout": "row-spread",
-    "x": 1080,
-    "y": 340,
     "wires": [
       []
     ]
@@ -422,6 +384,35 @@
     "x": 390,
     "y": 370,
     "wires": []
+  },
+  {
+    "id": "trend-group",
+    "type": "ui_group",
+    "name": "24 小时趋势 · 每 5 分钟采集",
+    "tab": "ui-tab",
+    "order": 2,
+    "disp": true,
+    "width": "12",
+    "collapse": false
+  },
+  {
+    "id": "overview",
+    "type": "ui_template",
+    "z": "parking-flow",
+    "group": "parking-group",
+    "name": "停车洞察总览",
+    "order": 1,
+    "width": "12",
+    "height": "32",
+    "format": "<style>\nbody.nr-dashboard-theme { background:#f2f5fa !important; font-family:\"Segoe UI\",\"Microsoft YaHei\",Arial,sans-serif !important; }\nbody.nr-dashboard-theme md-toolbar { background:#102b45 !important; }\nbody.nr-dashboard-theme md-card { box-shadow:none !important; border-radius:16px !important; }\n.parking-ui { color:#183047; padding:18px 22px 28px; background:#f2f5fa; }\n.parking-ui * { box-sizing:border-box; }\n.parking-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:20px; }\n.parking-eyebrow { color:#118b88; font-size:12px; font-weight:800; letter-spacing:.15em; text-transform:uppercase; margin:0 0 7px; }\n.parking-hero h1 { margin:0; color:#102b45; font-size:30px; line-height:1.2; font-weight:800; }\n.parking-subtitle { margin:9px 0 0; color:#617487; font-size:14px; line-height:1.5; }\n.parking-live { flex:none; display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:99px; color:#08756e; background:#dff7f0; font-size:12px; font-weight:800; }\n.parking-live:before { content:\"\"; width:8px; height:8px; border-radius:50%; background:#11aa7b; box-shadow:0 0 0 4px #b9ebdc; }\n.parking-kpis { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:17px; }\n.parking-kpi { padding:18px 19px; border:1px solid #e1e9f0; border-radius:15px; background:#fff; min-height:116px; }\n.parking-kpi small { display:block; color:#6c7e8f; font-size:12px; font-weight:700; }\n.parking-kpi strong { display:block; margin:10px 0 5px; color:#102b45; font-size:28px; line-height:1; font-weight:800; }\n.parking-kpi em { display:block; font-style:normal; color:#718395; font-size:11px; }\n.parking-kpi.urgent strong { color:#d46d3b; }\n.parking-kpi.teal strong { color:#087c78; }\n.parking-columns { display:grid; grid-template-columns:1.15fr .85fr; gap:14px; margin-bottom:14px; }\n.parking-panel { padding:20px; border:1px solid #e1e9f0; border-radius:15px; background:#fff; }\n.parking-panel-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:17px; }\n.parking-panel h2 { margin:0; color:#102b45; font-size:18px; line-height:1.35; font-weight:800; }\n.parking-panel p.note { margin:5px 0 0; color:#728394; font-size:12px; line-height:1.45; }\n.parking-tag { display:inline-block; flex:none; padding:5px 9px; border-radius:6px; background:#edf4f8; color:#3d6178; font-size:11px; font-weight:800; }\n.parking-district { padding:11px 0; border-top:1px solid #edf1f4; }\n.parking-district:first-of-type { border-top:0; }\n.parking-district-line { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:13px; }\n.parking-district-line b { color:#183047; font-weight:700; }\n.parking-district-line span { color:#c5683d; font-size:14px; font-weight:800; }\n.parking-bar { height:8px; margin:7px 0 5px; border-radius:20px; background:#edf2f6; overflow:hidden; }\n.parking-bar i { display:block; height:100%; border-radius:20px; background:linear-gradient(90deg,#efb05f,#dd7347); min-width:2px; }\n.parking-district-meta { color:#748596; font-size:11px; }\n.parking-callout { background:#e8f5f4; border-left:3px solid #138f89; border-radius:8px; padding:13px 14px; color:#245f61; font-size:12px; line-height:1.55; }\n.parking-callout strong { display:block; font-size:13px; margin-bottom:3px; }\n.parking-method { margin-top:18px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }\n.parking-method div { border:1px solid #e4ebef; border-radius:9px; padding:10px; background:#fafcfd; }\n.parking-method b { display:block; color:#203a53; font-size:12px; }\n.parking-method span { display:block; margin-top:4px; color:#708294; font-size:11px; line-height:1.35; }\n.parking-list-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }\n.parking-list-tools button { border:1px solid #d7e2e9; border-radius:8px; background:#fff; color:#486174; padding:7px 10px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }\n.parking-list-tools button.active { background:#102b45; border-color:#102b45; color:#fff; }\n.parking-list-tools input { width:170px; max-width:100%; border:1px solid #d7e2e9; border-radius:8px; padding:7px 10px; color:#173148; font:inherit; font-size:12px; outline:none; }\n.parking-list-tools input:focus { border-color:#15918d; }\n.parking-table { width:100%; border-collapse:collapse; }\n.parking-table th { padding:10px 8px; color:#76899a; font-size:11px; text-align:left; border-bottom:1px solid #e9eef2; }\n.parking-table td { padding:11px 8px; font-size:12px; border-bottom:1px solid #edf1f4; vertical-align:middle; }\n.parking-table tr:last-child td { border-bottom:0; }\n.parking-table .name { color:#183047; font-weight:700; }\n.parking-table .district { color:#738597; }\n.parking-table .number { color:#087c78; font-weight:800; white-space:nowrap; }\n.parking-table .full { color:#c75c43; font-weight:800; }\n.parking-footer { display:flex; justify-content:space-between; gap:12px; margin-top:14px; color:#789; font-size:11px; line-height:1.5; }\n.parking-footer a { color:#087c78; font-weight:700; text-decoration:none; }\n.parking-empty { padding:18px 5px; color:#718395; font-size:12px; }\n@media(max-width:900px) {\n .parking-hero { flex-direction:column; }\n .parking-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }\n .parking-columns { grid-template-columns:1fr; }\n}\n@media(max-width:540px) {\n .parking-ui { padding:12px 7px 20px; }\n .parking-hero h1 { font-size:24px; }\n .parking-kpis { gap:8px; }\n .parking-kpi { padding:14px; min-height:105px; }\n .parking-kpi strong { font-size:22px; }\n .parking-panel { padding:15px; }\n .parking-method { grid-template-columns:1fr; }\n .parking-list-tools input { width:100%; }\n .parking-table .district { display:none; }\n}\n</style>\n<div class=\"parking-ui\" ng-if=\"msg.payload\" ng-init=\"viewMode='available'\">\n  <header class=\"parking-hero\">\n    <div>\n      <p class=\"parking-eyebrow\">Hong Kong · Smart City Observatory</p>\n      <h1>香港停车供需观察</h1>\n      <p class=\"parking-subtitle\">私家车停车场实时空位 · 按地区对比 · 五分钟采集一次</p>\n    </div>\n    <span class=\"parking-live\">数据采集中</span>\n  </header>\n\n  <div class=\"parking-kpis\">\n    <div class=\"parking-kpi\"><small>有报告的停车场</small><strong>{{msg.payload.reported | number}}</strong><em>不是全港停车场总数</em></div>\n    <div class=\"parking-kpi urgent\"><small>报告已满</small><strong>{{msg.payload.full | number}}</strong><em>占有报告停车场 {{msg.payload.fullPct}}%</em></div>\n    <div class=\"parking-kpi teal\"><small>精确报告的可用车位</small><strong>{{msg.payload.spacesAvailable | number}}</strong><em>仅汇总 A 类精确数量</em></div>\n    <div class=\"parking-kpi\"><small>近 24 小时样本</small><strong>{{msg.payload.snapshotCount | number}}</strong><em>每次采集形成一个快照</em></div>\n  </div>\n\n  <div class=\"parking-columns\">\n    <section class=\"parking-panel\">\n      <div class=\"parking-panel-header\">\n        <div><h2>分区停车压力</h2><p class=\"note\">按“有报告停车场中已满的比例”排序；至少 3 个报告才纳入</p></div>\n        <span class=\"parking-tag\">{{msg.payload.districtCount}} 个地区</span>\n      </div>\n      <div class=\"parking-district\" ng-repeat=\"d in msg.payload.districts | limitTo:8 track by d.district\">\n        <div class=\"parking-district-line\"><b>{{$index+1}}. {{d.district}}</b><span>{{d.fullPct}}% 已满</span></div>\n        <div class=\"parking-bar\"><i ng-style=\"{'width':d.fullPct+'%'}\"></i></div>\n        <div class=\"parking-district-meta\">{{d.full}} / {{d.reported}} 个已满 · {{d.spacesAvailable | number}} 个精确空位 · {{d.exactCount}} 个 A 类报告</div>\n      </div>\n      <div class=\"parking-empty\" ng-if=\"!msg.payload.districts.length\">等待足够的分区数据。</div>\n    </section>\n\n    <section class=\"parking-panel\">\n      <div class=\"parking-panel-header\"><div><h2>如何解读</h2><p class=\"note\">把比例、数量和样本覆盖一起看</p></div></div>\n      <div class=\"parking-callout\">\n        <strong>{{msg.payload.insightTitle}}</strong>\n        {{msg.payload.insightText}}\n      </div>\n      <div class=\"parking-method\">\n        <div><b>A · 精确空位</b><span>{{msg.payload.exactCount}} 个停车场提供数字，可用于空位总和。</span></div>\n        <div><b>B · 满 / 未满</b><span>{{msg.payload.binaryCount}} 个停车场仅提供状态，不计入空位总和。</span></div>\n        <div><b>覆盖范围</b><span>{{msg.payload.metadataTotal}} 个目录停车场；{{msg.payload.notReporting}} 个未纳入本次有效报告。</span></div>\n      </div>\n      <p class=\"note\" style=\"margin-top:15px\">采集时间：{{msg.payload.updatedLocal}}（香港时间）。运营商更新时间可能不同；这不是车位占用率。</p>\n    </section>\n  </div>\n\n  <section class=\"parking-panel\">\n    <div class=\"parking-panel-header\">\n      <div><h2>停车场明细</h2><p class=\"note\">按精确空位数排序，或查看已满停车场；可按名称与地区搜索</p></div>\n      <div class=\"parking-list-tools\">\n        <button type=\"button\" ng-class=\"{'active':viewMode==='available'}\" ng-click=\"viewMode='available'\">较多空位</button>\n        <button type=\"button\" ng-class=\"{'active':viewMode==='full'}\" ng-click=\"viewMode='full'\">已满</button>\n        <input type=\"search\" aria-label=\"搜索停车场\" placeholder=\"搜索名称或地区\" ng-model=\"parkSearch\">\n      </div>\n    </div>\n    <table class=\"parking-table\">\n      <thead><tr><th>停车场</th><th class=\"district\">地区</th><th>状态 / 空位</th></tr></thead>\n      <tbody>\n        <tr ng-repeat=\"p in (viewMode==='full' ? msg.payload.fullParks : msg.payload.availableParks) | filter:parkSearch | limitTo:12 track by p.id\">\n          <td class=\"name\">{{p.name}}</td><td class=\"district\">{{p.district}}</td>\n          <td ng-if=\"viewMode==='available'\" class=\"number\">{{p.available | number}} 个</td>\n          <td ng-if=\"viewMode==='full'\" class=\"full\">已满</td>\n        </tr>\n      </tbody>\n    </table>\n    <div class=\"parking-empty\" ng-if=\"viewMode==='full' && !msg.payload.fullParks.length\">本次采集没有已满停车场。</div>\n    <div class=\"parking-footer\"><span>表格最多显示 12 项。B 类仅有状态，无法按空位数量排序。</span><a href=\"https://data.gov.hk/en-data/dataset/hk-dpo-datagovhk1-carpark-info-vacancy\" target=\"_blank\" rel=\"noopener\">数据来源 · data.gov.hk ↗</a></div>\n  </section>\n</div>",
+    "storeOutMessages": false,
+    "fwdInMessages": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "x": 1090,
+    "y": 300,
+    "wires": [
+      []
+    ]
   }
 ]
-
