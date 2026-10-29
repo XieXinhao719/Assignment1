@@ -20,6 +20,12 @@ The dashboard displays the numerator and denominator beside each district's full
 
 Each snapshot stores `collectedAt`, district aggregates, and individual car-park observations in MongoDB's `parking_snapshots` collection. The timestamp records collection time, which may differ from each operator's update time.
 
+## Collection continuity
+
+The official API serves the current vacancy report and has no historical-time parameter. Node-RED cannot collect while its container or the computer is off, and missed samples cannot be reconstructed honestly. The 24-hour charts leave a visible break whenever consecutive snapshots are more than 12 minutes apart. The dashboard reports the number of gaps, the longest gap, and the share of the approximately 288 expected five-minute snapshots actually stored.
+
+To collect continuously, keep this computer, Docker Desktop, and the Compose services running, or deploy the same Compose project to an always-on host. Setting Docker Desktop to start with Windows helps only while the computer itself is on. A remote host must be configured and secured before use; no hosting is provided by this repository.
+
 ## Editing the dashboard
 
 Editable HTML and JavaScript live in `dashboard/`. After changing them, run `node scripts/build-flow.mjs` to update the exported JSON and `node scripts/check-flow.mjs` to check aggregation rules and flow references. Import and deploy the updated flow in Node-RED.

@@ -43,4 +43,14 @@ assert.equal(result[2].payload.reported, 2);
 assert.equal(result[2].payload.fullPct, 50);
 assert.equal(result[2].payload.binaryCount, 1);
 assert.equal(result[2].payload.notReporting, 2);
-console.log("Flow references and A/B/C aggregation checks passed");
+const snapshots = ["2026-10-29T00:00:00.000Z", "2026-10-29T00:05:00.000Z", "2026-10-29T01:00:00.000Z"]
+    .map(collectedAt => ({
+        ...message.payload,
+        collectedAt,
+        districts: [{ ...message.payload.districts[0], reported: 3 }]
+    }));
+const history = format({ payload: snapshots });
+assert.equal(history[2].payload.gapCount, 1);
+assert.equal(history[2].payload.longestGapMinutes, 55);
+assert.deepEqual(history[0].payload[0].data[0].map(point => point.y), [3, 3, null, 3]);
+console.log("Flow, A/B/C aggregation, and collection-gap checks passed");

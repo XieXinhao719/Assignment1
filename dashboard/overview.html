@@ -17,6 +17,8 @@ body.nr-dashboard-theme md-card { box-shadow:none !important; border-radius:16px
 .parking-kpi em { display:block; font-style:normal; color:#718395; font-size:11px; }
 .parking-kpi.urgent strong { color:#d46d3b; }
 .parking-kpi.teal strong { color:#087c78; }
+.parking-gap-note { margin:-1px 0 17px; padding:13px 16px; border:1px solid #f2d5a2; border-left:4px solid #d99430; border-radius:10px; background:#fff8e9; color:#765325; font-size:12px; line-height:1.5; }
+.parking-gap-note strong { display:block; margin-bottom:2px; font-size:13px; }
 .parking-columns { display:grid; grid-template-columns:1.15fr .85fr; gap:14px; margin-bottom:14px; }
 .parking-panel { padding:20px; border:1px solid #e1e9f0; border-radius:15px; background:#fff; }
 .parking-panel-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:17px; }
@@ -74,68 +76,74 @@ body.nr-dashboard-theme md-card { box-shadow:none !important; border-radius:16px
   <header class="parking-hero">
     <div>
       <p class="parking-eyebrow">Hong Kong · Smart City Observatory</p>
-      <h1>香港停车供需观察</h1>
-      <p class="parking-subtitle">私家车停车场实时空位 · 按地区对比 · 五分钟采集一次</p>
+      <h1>Hong Kong Parking Observatory</h1>
+      <p class="parking-subtitle">Live private-car parking availability · District comparison · Collected every five minutes</p>
     </div>
-    <span class="parking-live">数据采集中</span>
+    <span class="parking-live">Collecting data</span>
   </header>
 
   <div class="parking-kpis">
-    <div class="parking-kpi"><small>有报告的停车场</small><strong>{{msg.payload.reported | number}}</strong><em>不是全港停车场总数</em></div>
-    <div class="parking-kpi urgent"><small>报告已满</small><strong>{{msg.payload.full | number}}</strong><em>占有报告停车场 {{msg.payload.fullPct}}%</em></div>
-    <div class="parking-kpi teal"><small>精确报告的可用车位</small><strong>{{msg.payload.spacesAvailable | number}}</strong><em>仅汇总 A 类精确数量</em></div>
-    <div class="parking-kpi"><small>近 24 小时样本</small><strong>{{msg.payload.snapshotCount | number}}</strong><em>每次采集形成一个快照</em></div>
+    <div class="parking-kpi"><small>Reporting car parks</small><strong>{{msg.payload.reported | number}}</strong><em>Not the total number of car parks</em></div>
+    <div class="parking-kpi urgent"><small>Reported full</small><strong>{{msg.payload.full | number}}</strong><em>{{msg.payload.fullPct}}% of reporting car parks</em></div>
+    <div class="parking-kpi teal"><small>Exact vacant spaces</small><strong>{{msg.payload.spacesAvailable | number}}</strong><em>Sum of Type A reports only</em></div>
+    <div class="parking-kpi"><small>24-hour snapshots</small><strong>{{msg.payload.snapshotCount | number}}</strong><em>About 288 expected if always on</em></div>
+  </div>
+
+  <div class="parking-gap-note" ng-if="msg.payload.gapCount">
+    <strong>Collection interrupted</strong>
+    {{msg.payload.gapCount}} gap(s) longer than 12 minutes; the longest is {{msg.payload.longestGapMinutes}} minutes.
+    Only {{msg.payload.coveragePct}}% of expected five-minute snapshots were recorded in the past 24 hours. The trend lines stop at missing intervals; no values are estimated.
   </div>
 
   <div class="parking-columns">
     <section class="parking-panel">
       <div class="parking-panel-header">
-        <div><h2>分区停车压力</h2><p class="note">按“有报告停车场中已满的比例”排序；至少 3 个报告才纳入</p></div>
-        <span class="parking-tag">{{msg.payload.districtCount}} 个地区</span>
+        <div><h2>District parking pressure</h2><p class="note">Ranked by the share of reporting car parks that are full; at least 3 reports required</p></div>
+        <span class="parking-tag">{{msg.payload.districtCount}} districts</span>
       </div>
       <div class="parking-district" ng-repeat="d in msg.payload.districts | limitTo:8 track by d.district">
-        <div class="parking-district-line"><b>{{$index+1}}. {{d.district}}</b><span>{{d.fullPct}}% 已满</span></div>
+        <div class="parking-district-line"><b>{{$index+1}}. {{d.district}}</b><span>{{d.fullPct}}% full</span></div>
         <div class="parking-bar"><i ng-style="{'width':d.fullPct+'%'}"></i></div>
-        <div class="parking-district-meta">{{d.full}} / {{d.reported}} 个已满 · {{d.spacesAvailable | number}} 个精确空位 · {{d.exactCount}} 个 A 类报告</div>
+        <div class="parking-district-meta">{{d.full}} / {{d.reported}} full · {{d.spacesAvailable | number}} exact vacancies · {{d.exactCount}} Type A reports</div>
       </div>
-      <div class="parking-empty" ng-if="!msg.payload.districts.length">等待足够的分区数据。</div>
+      <div class="parking-empty" ng-if="!msg.payload.districts.length">Waiting for enough district reports.</div>
     </section>
 
     <section class="parking-panel">
-      <div class="parking-panel-header"><div><h2>如何解读</h2><p class="note">把比例、数量和样本覆盖一起看</p></div></div>
+      <div class="parking-panel-header"><div><h2>How to read this</h2><p class="note">Compare rates, counts, and reporting coverage together</p></div></div>
       <div class="parking-callout">
         <strong>{{msg.payload.insightTitle}}</strong>
         {{msg.payload.insightText}}
       </div>
       <div class="parking-method">
-        <div><b>A · 精确空位</b><span>{{msg.payload.exactCount}} 个停车场提供数字，可用于空位总和。</span></div>
-        <div><b>B · 满 / 未满</b><span>{{msg.payload.binaryCount}} 个停车场仅提供状态，不计入空位总和。</span></div>
-        <div><b>覆盖范围</b><span>{{msg.payload.metadataTotal}} 个目录停车场；{{msg.payload.notReporting}} 个未纳入本次有效报告。</span></div>
+        <div><b>A · Exact vacancies</b><span>{{msg.payload.exactCount}} car parks provide numeric counts.</span></div>
+        <div><b>B · Full / not full</b><span>{{msg.payload.binaryCount}} provide status only, excluded from the vacancy sum.</span></div>
+        <div><b>Coverage</b><span>{{msg.payload.metadataTotal}} listed car parks; {{msg.payload.notReporting}} lack a valid report in this snapshot.</span></div>
       </div>
-      <p class="note" style="margin-top:15px">采集时间：{{msg.payload.updatedLocal}}（香港时间）。运营商更新时间可能不同；这不是车位占用率。</p>
+      <p class="note" style="margin-top:15px">Collected: {{msg.payload.updatedLocal}} (Hong Kong time). Operator update times may differ. This is not a space occupancy rate.</p>
     </section>
   </div>
 
   <section class="parking-panel">
     <div class="parking-panel-header">
-      <div><h2>停车场明细</h2><p class="note">按精确空位数排序，或查看已满停车场；可按名称与地区搜索</p></div>
+      <div><h2>Car park details</h2><p class="note">Explore the highest exact vacancy counts or full car parks; search by name or district</p></div>
       <div class="parking-list-tools">
-        <button type="button" ng-class="{'active':viewMode==='available'}" ng-click="viewMode='available'">较多空位</button>
-        <button type="button" ng-class="{'active':viewMode==='full'}" ng-click="viewMode='full'">已满</button>
-        <input type="search" aria-label="搜索停车场" placeholder="搜索名称或地区" ng-model="parkSearch">
+        <button type="button" ng-class="{'active':viewMode==='available'}" ng-click="viewMode='available'">Most vacancies</button>
+        <button type="button" ng-class="{'active':viewMode==='full'}" ng-click="viewMode='full'">Full</button>
+        <input type="search" aria-label="Search car parks" placeholder="Search name or district" ng-model="parkSearch">
       </div>
     </div>
     <table class="parking-table">
-      <thead><tr><th>停车场</th><th class="district">地区</th><th>状态 / 空位</th></tr></thead>
+      <thead><tr><th>Car park</th><th class="district">District</th><th>Status / vacancies</th></tr></thead>
       <tbody>
         <tr ng-repeat="p in (viewMode==='full' ? msg.payload.fullParks : msg.payload.availableParks) | filter:parkSearch | limitTo:12 track by p.id">
           <td class="name">{{p.name}}</td><td class="district">{{p.district}}</td>
-          <td ng-if="viewMode==='available'" class="number">{{p.available | number}} 个</td>
-          <td ng-if="viewMode==='full'" class="full">已满</td>
+          <td ng-if="viewMode==='available'" class="number">{{p.available | number}} spaces</td>
+          <td ng-if="viewMode==='full'" class="full">Full</td>
         </tr>
       </tbody>
     </table>
-    <div class="parking-empty" ng-if="viewMode==='full' && !msg.payload.fullParks.length">本次采集没有已满停车场。</div>
-    <div class="parking-footer"><span>表格最多显示 12 项。B 类仅有状态，无法按空位数量排序。</span><a href="https://data.gov.hk/en-data/dataset/hk-dpo-datagovhk1-carpark-info-vacancy" target="_blank" rel="noopener">数据来源 · data.gov.hk ↗</a></div>
+    <div class="parking-empty" ng-if="viewMode==='full' && !msg.payload.fullParks.length">No car parks are reported full in this snapshot.</div>
+    <div class="parking-footer"><span>Showing up to 12 items. Type B reports have no numeric vacancy count.</span><a href="https://data.gov.hk/en-data/dataset/hk-dpo-datagovhk1-carpark-info-vacancy" target="_blank" rel="noopener">Source · data.gov.hk ↗</a></div>
   </section>
 </div>

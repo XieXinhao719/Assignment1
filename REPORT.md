@@ -53,6 +53,8 @@ As an **early validation example**, a snapshot observed on 29 October 2026 at ab
 
 Coverage is unequal across districts. A high full share based on three reporting car parks is less persuasive than the same share based on thirty. Some operators provide only B-type status, and collection time can differ from operator update time. Raw vacant-space totals can reflect coverage rather than underlying demand.
 
+The API provides current reports, not historical queries. Collection stops when the Node-RED container or its host is off. The dashboard treats intervals longer than 12 minutes as missing data and breaks the trend lines; it never fills them with invented values. A continuous 24-hour series requires an always-on collector. Interpret sparse periods alongside the displayed snapshot coverage and gap count.
+
 After collecting several days of snapshots, compare weekdays with weekends and morning, afternoon and evening periods. Report each district's median and range of full share, sample size, and frequency among the highest-pressure districts. Check whether full-share spikes coincide with falling A-type vacant-space sums. Do not infer causation from these correlations.
 
 ## 7. Submission work still needed

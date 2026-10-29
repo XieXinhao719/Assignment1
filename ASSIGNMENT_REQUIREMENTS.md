@@ -1,15 +1,15 @@
-# 作业要求与项目对应关系
+# Assignment requirements and project mapping
 
-依据老师提供的《Programming Assignment.pdf》整理。截止时间：**2026 年 12 月 1 日 23:55 前**。这是 **2–3 人小组作业**。
+Based on the supplied `Programming Assignment.pdf`. Deadline: **1 December 2026, 23:55**. This is a **two- or three-person group project**.
 
-| 要求 | 当前项目如何对应 | 提交前还需做什么 |
+| Requirement | Current project | Before submission |
 | --- | --- | --- |
-| 从 data.gov.hk 获取数据流 | Node-RED 分别获取停车场资料和每 5 分钟空位报告 | 保留运行记录与数据来源 |
-| 分析与关联 | 按 `park_Id` 连接两类数据，按地区计算精确空位与满位比例 | 采集多天后补充时段分析 |
-| 用仪表盘展示智慧城市洞察 | 实时指标、分区压力、停车场明细、24 小时趋势 | 截图并解释每项指标的用途 |
-| 在 Node-RED 环境编程 | 可导入的 `flows/smart-parking.json` | 提交前从实际运行环境再次导出 |
-| 用 MongoDB 存储数据 | `parking_snapshots` 保存每次采集的地区与停车场记录 | 在报告里写明字段、采集周期和样本量 |
-| 书面报告 | `REPORT.md` 已有用例、实现、存储、指标和局限性草稿 | 填写组员、最终结果、截图与结论 |
-| 一个 ZIP 经 Moodle 提交 | 流程 JSON、Docker 描述文件和报告均在项目中 | 制作最终 ZIP 并在 Moodle 上传；GitHub 不等于 Moodle 提交 |
+| Collect data streams from data.gov.hk | Node-RED retrieves car park metadata and vacancy reports every five minutes | Keep a record of the collection period and source |
+| Analyse and correlate data | Join by `park_Id` and calculate district vacant-space totals and full shares | Add a multi-day time-of-day analysis |
+| Present smart city insights on a dashboard | Live metrics, district pressure, car park detail, and 24-hour trends | Capture screenshots and explain each view |
+| Program in Node-RED | Importable `flows/smart-parking.json` | Re-export the final deployed flow |
+| Store data in MongoDB | `parking_snapshots` stores each collection | Document fields, interval, and sample size |
+| Write a project report | `REPORT.md` drafts the use case, implementation, storage, metrics, and limitations | Add group members, final results, screenshots, and conclusions |
+| Submit one ZIP via Moodle | The flow, Docker description, and report are in this project | Package and submit the final ZIP; GitHub is not the Moodle submission |
 
-迟交每天扣 5%；超过一周不接受；无法编译的程序不评分；抄袭会被严惩。老师的 HKO 流程是示例，题目允许自行选择智慧城市用例，本项目使用停车数据。
+Late work loses 5% per day and is not accepted after one week. Programs that cannot compile are not graded. Plagiarism is heavily penalized. The supplied HKO flow is an example; this project uses an independent parking use case.

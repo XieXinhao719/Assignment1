@@ -10,12 +10,21 @@ const seriesNames = [...eligible]
     .slice(0, 6)
     .map(d => d.district);
 
+const maxGapMs = 12 * 60 * 1000;
+const gaps = rows.slice(1).map((row, index) =>
+    Date.parse(row.collectedAt) - Date.parse(rows[index].collectedAt)
+).filter(duration => duration > maxGapMs);
+const insertGaps = points => points.flatMap((point, index) =>
+    index && point.x - points[index - 1].x > maxGapMs
+        ? [{ x: points[index - 1].x + 1, y: null }, point]
+        : [point]
+);
 const chart = key => [{
     series: seriesNames,
-    data: seriesNames.map(name => rows.map(row => {
+    data: seriesNames.map(name => insertGaps(rows.map(row => {
         const district = row.districts.find(d => d.district === name);
         return { x: Date.parse(row.collectedAt), y: district ? Number(district[key]) : null };
-    }).filter(point => point.y !== null)),
+    }))),
     labels: [""]
 }];
 
@@ -41,10 +50,14 @@ const overview = {
     binaryCount: Math.max(0, reported - exactCount),
     spacesAvailable,
     snapshotCount: rows.length,
+    expectedSnapshots: 288,
+    coveragePct: Math.min(100, Math.round(100 * rows.length / 288)),
+    gapCount: gaps.length,
+    longestGapMinutes: gaps.length ? Math.round(Math.max(...gaps) / 60000) : 0,
     districtCount: eligible.length,
     metadataTotal,
     notReporting: Math.max(0, metadataTotal - reported),
-    updatedLocal: new Date(latest.collectedAt).toLocaleString("zh-HK", {
+    updatedLocal: new Date(latest.collectedAt).toLocaleString("en-GB", {
         timeZone: "Asia/Hong_Kong",
         year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit", hour12: false
@@ -52,10 +65,10 @@ const overview = {
     districts: pressure,
     availableParks,
     fullParks,
-    insightTitle: leading ? "重点观察：" + leading.district : "等待分区报告",
+    insightTitle: leading ? "District to watch: " + leading.district : "Waiting for district reports",
     insightText: leading
-        ? "该区 " + leading.full + " / " + leading.reported + " 个报告停车场已满（" + leading.fullPct + "%）。比较各区时，也要看报告数量和 A 类覆盖，不能把精确空位总数当作占用率。"
-        : "当前各区的有效报告尚不足 3 个，暂不排名。"
+        ? leading.full + " of " + leading.reported + " reporting car parks are full (" + leading.fullPct + "%). Compare districts alongside report counts and Type A coverage. Exact vacant-space totals are not occupancy rates."
+        : "No district has at least three valid reports yet."
 };
 
 return [
