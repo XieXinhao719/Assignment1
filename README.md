@@ -1,6 +1,6 @@
 # Hong Kong Smart Parking
 
-COMP7503A Node-RED smart city project. It collects real-time private-car parking vacancies from Hong Kong's open data portal, joins them to car park metadata, saves district snapshots in MongoDB, and presents current and historical insights on a Chinese dashboard. This transport use case is independent of the supplied weather example.
+COMP7503A Node-RED smart city project. It collects real-time private-car parking vacancies from Hong Kong's open data portal, joins them to car park metadata, saves district snapshots in MongoDB, and presents current and historical insights on an English dashboard. This transport use case is independent of the supplied weather example.
 
 ## Start
 
